@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+             android:layout_width="wrap_content"
+             android:layout_height="wrap_content"
+             android:paddingBottom="40dp">
+<RelativeLayout android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/shadow_151755">
+
+    <LinearLayout android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:orientation="vertical">
+
+        <TextView android:id="@+id/title"
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:background="@color/colorPrimary"
+                  android:textColor="@android:color/white"
+                  android:textStyle="bold"
+                  android:textSize="13sp"
+                  android:maxWidth="300dp"
+                  android:minWidth="240dip"
+                  android:text="Testddddfsffdsfdsfdffdsdfsfdfdfdsfdfddfsdfsdfsffdfsdfsfdsdfsdfsfdsfd"
+                  android:padding="10dp"/>
+
+        <TextView android:id="@+id/address"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:padding="10dp"
+                  android:background="@android:color/white"
+                  android:textSize="11sp"
+                  android:text="11F., No.12, Sec. 4, Chongxin Rd., Sanchong District, New Taipei City 241, Taiwan (R.O.C.)"/>
+    </LinearLayout>
+</RelativeLayout>
+</FrameLayout>
