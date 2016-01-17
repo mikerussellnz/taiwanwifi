@@ -1,11 +1,7 @@
 package com.mikerussellnz.taiwanwifi;
 
 import android.graphics.Color;
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import android.location.Location;
 import android.os.Build;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
@@ -17,22 +13,24 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.TextView;
 
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.location.LocationServices;
+import com.mikepenz.iconics.IconicsDrawable;
 import com.mikepenz.material_design_iconic_typeface_library.MaterialDesignIconic;
 import com.mikerussellnz.taiwanwifi.Clustering.Cluster;
 import com.mikerussellnz.taiwanwifi.Clustering.Clusterer;
 import com.mikerussellnz.taiwanwifi.DataImport.DataImportCompletedListener;
 import com.mikerussellnz.taiwanwifi.DataImport.iTaiwanImporter;
+import com.mikerussellnz.taiwanwifi.Location.BearingSource;
+import com.mikerussellnz.taiwanwifi.Location.LocationChangedFlags;
+import com.mikerussellnz.taiwanwifi.Location.LocationChangedListener;
+import com.mikerussellnz.taiwanwifi.Location.LocationManager;
 import com.mikerussellnz.taiwanwifi.MapData.MapDataAvailableListener;
 import com.mikerussellnz.taiwanwifi.MapData.MapDataFileRetriever;
 import com.mikerussellnz.taiwanwifi.Mapping.BoundingBoxUtils;
 import com.mikerussellnz.taiwanwifi.Mapping.LayerGroup;
 import com.mikerussellnz.taiwanwifi.Mapping.MarkerTappedListener;
-import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.api.GoogleApiClient;
-import com.google.android.gms.location.LocationListener;
-import com.google.android.gms.location.LocationRequest;
-import com.google.android.gms.location.LocationServices;
-import com.mikepenz.iconics.IconicsDrawable;
 
 import org.mapsforge.core.model.BoundingBox;
 import org.mapsforge.core.model.LatLong;
@@ -54,9 +52,7 @@ import org.mapsforge.map.reader.MapFile;
 import org.mapsforge.map.rendertheme.InternalRenderTheme;
 
 import java.io.File;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 
 import io.realm.Realm;
@@ -64,31 +60,24 @@ import io.realm.Realm;
 public class MainActivity extends AppCompatActivity implements
 		GoogleApiClient.OnConnectionFailedListener,
 		GoogleApiClient.ConnectionCallbacks,
-		LocationListener,
-		SensorEventListener,
 		MarkerTappedListener,
-		Observer {
+		Observer, LocationChangedListener {
 
 	private GoogleApiClient _googleApiClient;
-	private SensorManager _sensorManager;
 	private MapView _mapView;
 	private FloatingActionButton _actionButton;
 	private UserLocation _userLocation;
+
+	private LocationManager _locationManager;
 
 	private View _popupView;
 	private Marker _selectedMarker;
 
 	private double _oldZoomLevel = -1.0;
 
-	private LatLong _currentLocation;
-	private int _currentAccuracy;
-	private int _currentBearing;
-
 	private BoundingBox _mapBounds;
 	private TextView _debugText;
 	private boolean _trackingLocation = false;
-
-	private boolean _hasLocationBearing;
 
 	private LayerGroup _hotSpotsLayer;
 	private LayerGroup _overlaysLayer;
@@ -101,14 +90,6 @@ public class MainActivity extends AppCompatActivity implements
 				.addApi(LocationServices.API)
 				.build();
 		_googleApiClient.connect();
-	}
-
-	protected LocationRequest createLocationRequest() {
-		LocationRequest mLocationRequest = new LocationRequest();
-		mLocationRequest.setInterval(1000);
-		mLocationRequest.setFastestInterval(1000);
-		mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
-		return mLocationRequest;
 	}
 
 	@Override
@@ -156,7 +137,7 @@ public class MainActivity extends AppCompatActivity implements
 		_mapView.setClickable(true);
 
 		_mapView.getMapScaleBar().setVisible(true);
-		_mapView.setBuiltInZoomControls(false);
+		_mapView.setBuiltInZoomControls(true);
 
 		_mapView.setGestureDetector(new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
 			@Override
@@ -193,6 +174,9 @@ public class MainActivity extends AppCompatActivity implements
 			}
 		}));
 
+		_userLocation = new UserLocation(this, _mapView, null, 0);
+		_overlaysLayer.add(_userLocation);
+
 		final Model model = _mapView.getModel();
 		MapViewPosition position = model.mapViewPosition;
 		position.setZoomLevelMin((byte) 7);
@@ -207,7 +191,9 @@ public class MainActivity extends AppCompatActivity implements
 		});
 
 		buildGoogleApiClient();
-		_sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+		SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+		_locationManager = new LocationManager(_googleApiClient, sensorManager);
+		_locationManager.setLocationChangedListener(this);
 
 		Realm realm = Realm.getInstance(this);
 		final HotSpotList list = new HotSpotList(realm);
@@ -315,21 +301,22 @@ public class MainActivity extends AppCompatActivity implements
 	}
 
 	private boolean panToCurrentLocation(boolean isTrackingUpdate) {
-		if (_currentLocation == null) {
+		LatLong currentLocation = _locationManager != null ? _locationManager.getCurrentLocation() : null;
+		if (currentLocation == null) {
 			return false;
 		}
-		if (_mapBounds != null && !_mapBounds.contains(_currentLocation)) {
+		if (_mapBounds != null && !_mapBounds.contains(currentLocation)) {
 			if (!isTrackingUpdate) {
 				Snackbar.make(_mapView, "You are not in Taiwan!", Snackbar.LENGTH_LONG).show();
 				return false;
 			}
 		} else {
 			if (!isTrackingUpdate) {
-				BoundingBox box = BoundingBoxUtils.boxForLatLon(_currentLocation);
+				BoundingBox box = BoundingBoxUtils.boxForLatLon(currentLocation);
 				box = box.extendMeters(200);
 				zoomToBoundingBox(box, false, true);
 			} else {
-				_mapView.setCenter(_currentLocation);
+				_mapView.setCenter(currentLocation);
 			}
 		}
 		return true;
@@ -338,25 +325,19 @@ public class MainActivity extends AppCompatActivity implements
 	@Override
 	public void onConnected(Bundle bundle) {
 		System.out.println("services connected");
-		Location lastLocation = LocationServices.FusedLocationApi.getLastLocation(
-				_googleApiClient);
+		LatLong latLon = _locationManager.startLocationUpdates();
 
-		LatLong latLon = null;
-		if (lastLocation != null) {
-			latLon = new LatLong(lastLocation.getLatitude(), lastLocation.getLongitude());
-		} else {
+		if (latLon == null) {
 			Snackbar waiting = Snackbar.make(_mapView, "Waiting for location...", Snackbar.LENGTH_LONG);
 			waiting.show();
 		}
 
-		_currentLocation = latLon;
-
-		_userLocation = new UserLocation(this, _mapView, _currentLocation, 0);
-
-		_overlaysLayer.add(_userLocation);
+		if (latLon != null) {
+			_userLocation.setLatLong(latLon);
+			_overlaysLayer.requestRedraw();
+		}
 
 		panToCurrentLocation(false);
-		startLocationUpdates();
 	}
 
 	private void zoomToBoundingBox(BoundingBox box, boolean allowZoomOut, boolean animate) {
@@ -390,94 +371,15 @@ public class MainActivity extends AppCompatActivity implements
 	}
 
 	@Override
-	public void onLocationChanged(Location location) {
-		LatLong latLon = new LatLong(location.getLatitude(), location.getLongitude());
-
-		int bearing = Math.round(location.getBearing());
-		int accuracy = Math.round(location.getAccuracy());
-
-		System.out.println("Using provider: " + location.getProvider());
-		System.out.println("Location provider bearing: " + location.hasBearing() + ": " + bearing);
-
-		SimpleDateFormat sd = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
-
-		_debugText.setText("Provider: " + location.getProvider() + "\n"
-				+ "Time: " + sd.format(new Date(location.getTime())) + "\n"
-				+ "Location: " + location.getLatitude() + "," + location.getLongitude() + "\n"
-				+ "Accuracy: " + location.hasAccuracy() + ": " + accuracy + "\n"
-				+ "Bearing: " + location.hasBearing() + ": " + bearing + "\n"
-				+ "Speed: " + location.hasSpeed() + ": " + location.getSpeed() + "\n"
-				+ "Altitude: " + location.hasAltitude() + ": " + location.getAltitude());
-
-		_userLocation.setLatLong(latLon);
-
-		if (accuracy != _currentAccuracy) {
-			_userLocation.setZoneRadius(accuracy);
-			_overlaysLayer.requestRedraw();
-		}
-
-		_hasLocationBearing = location.hasBearing();
-
-		if (_hasLocationBearing) {
-			_userLocation.setDebugHasGpsBearing(true);
-			if (_currentBearing != bearing) {
-				_userLocation.setBearing(bearing);
-				_overlaysLayer.requestRedraw();
-				_currentBearing = bearing;
-			}
-		}
-
-		_currentLocation = latLon;
-		_currentAccuracy = accuracy;
-
-		if (_trackingLocation) {
-			panToCurrentLocation(true);
-		}
-	}
-
-	public void startLocationUpdates() {
-		if (_googleApiClient.isConnected()) {
-			LocationServices.FusedLocationApi.requestLocationUpdates(
-					_googleApiClient, createLocationRequest(), this);
-		}
-	}
-
-	public void stopLocationUpdates() {
-		if (_googleApiClient.isConnected()) {
-			LocationServices.FusedLocationApi.removeLocationUpdates(_googleApiClient, this);
-		}
-	}
-
-	@Override
 	protected void onPause() {
 		super.onPause();
-		stopLocationUpdates();
-		_sensorManager.unregisterListener(this);
+		_locationManager.stopLocationUpdates();
 	}
 
 	@Override
 	protected void onResume() {
 		super.onResume();
-		startLocationUpdates();
-		_sensorManager.registerListener(this, _sensorManager.getDefaultSensor(Sensor.TYPE_ORIENTATION),
-				SensorManager.SENSOR_DELAY_UI);
-	}
-
-	@Override
-	public void onSensorChanged(SensorEvent event) {
-		int bearing = Math.round(event.values[0]);
-		if (_userLocation != null && !_hasLocationBearing) {
-			_userLocation.setDebugHasGpsBearing(false);
-			if (_currentBearing != bearing) {
-				_userLocation.setBearing(bearing);
-				_overlaysLayer.requestRedraw();
-				_currentBearing = bearing;
-			}
-		}
-	}
-
-	@Override
-	public void onAccuracyChanged(Sensor sensor, int accuracy) {
+		_locationManager.startLocationUpdates();
 	}
 
 	private void addOrMovePopup(Marker marker) {
@@ -559,6 +461,37 @@ public class MainActivity extends AppCompatActivity implements
 					_popupView.postDelayed(_readdPopupView, 250);
 				}
 			});
+		}
+	}
+
+	@Override
+	public void onLocatonChanged(LatLong latLon, int accuracy, int bearing, BearingSource bearingSource, LocationChangedFlags changeFlags) {
+		_debugText.setText(_locationManager.getDebugText());
+
+		if (changeFlags.hasFlag(LocationChangedFlags.LOCATION_CHANGED)) {
+			_userLocation.setLatLong(latLon);
+		}
+
+		if (changeFlags.hasFlag(LocationChangedFlags.ACCURACY_CHANGED)) {
+			_userLocation.setZoneRadius(accuracy);
+		}
+
+		if (changeFlags.hasFlag(LocationChangedFlags.BEARING_CHANGED)) {
+			_userLocation.setBearing(bearing);
+		}
+
+		if (changeFlags.hasFlag(LocationChangedFlags.BEARING_SOURCE_CHANGED)) {
+			if (bearingSource == BearingSource.LOCATION_PROVIDER) {
+				_userLocation.setDebugHasGpsBearing(true);
+			} else {
+				_userLocation.setDebugHasGpsBearing(false);
+			}
+		}
+
+		_overlaysLayer.requestRedraw();
+
+		if (_trackingLocation) {
+			panToCurrentLocation(true);
 		}
 	}
 }
