@@ -7,6 +7,7 @@ import java.util.ArrayList;
  */
 public class QuadTreeNode<T extends QuadTreeItem> {
 	public static final int MAX_NODE_CAPACITY = 32;
+	public static final int MIN_NODE_SIZE = 250;
 
 	private BoundingBox _boundingBox;
 
@@ -58,7 +59,8 @@ public class QuadTreeNode<T extends QuadTreeItem> {
 			return false;
 		}
 
-		if (isLeaf() && count() < QuadTreeNode.MAX_NODE_CAPACITY) {
+		if (isLeaf() && (count() < QuadTreeNode.MAX_NODE_CAPACITY ||
+				_boundingBox.absoluteWidth() < QuadTreeNode.MIN_NODE_SIZE)) {
 			addItem(item);
 			return true;
 		}
