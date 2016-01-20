@@ -68,4 +68,9 @@ public class Cluster<T extends Marker> implements QuadTreeItem {
 	public Point getLocation() {
 		return _cachedPoint;
 	}
+
+	public void remove(T item) {
+		_items.remove(item);
+		_center = null;
+	}
 }
