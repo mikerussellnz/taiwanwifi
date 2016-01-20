@@ -20,6 +20,7 @@ import com.mikepenz.iconics.IconicsDrawable;
 import com.mikepenz.material_design_iconic_typeface_library.MaterialDesignIconic;
 import com.mikerussellnz.taiwanwifi.Clustering.Cluster;
 import com.mikerussellnz.taiwanwifi.Clustering.Clusterer;
+import com.mikerussellnz.taiwanwifi.Clustering.ImprovedClusterer;
 import com.mikerussellnz.taiwanwifi.DataImport.DataImportCompletedListener;
 import com.mikerussellnz.taiwanwifi.DataImport.iTaiwanImporter;
 import com.mikerussellnz.taiwanwifi.Location.BearingSource;
@@ -53,7 +54,7 @@ import org.mapsforge.map.rendertheme.InternalRenderTheme;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.Collection;
 
 import io.realm.Realm;
 
@@ -83,6 +84,8 @@ public class MainActivity extends AppCompatActivity implements
 	private LayerGroup _overlaysLayer;
 	private ArrayList<HotSpot> _allHotSpots;
 
+	private Clusterer<HotSpot> _clusterer;
+
 	protected synchronized void buildGoogleApiClient() {
 		_googleApiClient = new GoogleApiClient.Builder(this)
 				.addConnectionCallbacks(this)
@@ -103,6 +106,8 @@ public class MainActivity extends AppCompatActivity implements
 
 		_mapView = (MapView) findViewById(R.id.mapView);
 		_actionButton = (FloatingActionButton) findViewById(R.id.fab);
+
+		_clusterer = new ImprovedClusterer<>(_mapView);
 
 		/* FloatingActionButton settingsFab = (FloatingActionButton) findViewById(R.id.settingsFab);
 		settingsFab.setImageDrawable(new IconicsDrawable(this, GoogleMaterial.Icon.gmd_settings).color(Color.DKGRAY));
@@ -221,6 +226,9 @@ public class MainActivity extends AppCompatActivity implements
 			_allHotSpots.add(hotSpot);
 		}
 		System.out.println("done querying");
+
+		_clusterer.addAll(_allHotSpots);
+		System.out.println("done adding to clusterer.");
 	}
 
 	private void addHotSpotsToMap() {
@@ -228,9 +236,7 @@ public class MainActivity extends AppCompatActivity implements
 			return;
 		}
 
-		Clusterer<HotSpot> clusterer = new Clusterer<>(_mapView);
-		clusterer.addAll(_allHotSpots);
-		List<Cluster<HotSpot>> clusters = clusterer.getClusters();
+		Collection<Cluster<HotSpot>> clusters = _clusterer.cluster();
 
 		boolean stillCanSeeSelectedMarker = false;
 
