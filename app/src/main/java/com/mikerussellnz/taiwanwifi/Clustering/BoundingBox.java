@@ -27,4 +27,12 @@ public class BoundingBox {
 	public boolean intersects(BoundingBox box2) {
 		return (x1 <= box2.x2 && x2 >= box2.x1 && y1 <= box2.y2 && y2 >= box2.y1);
 	}
+
+	public double absoluteWidth() {
+		return Math.abs(x1 - x2);
+	}
+
+	public double absoluteHeight() {
+		return Math.abs(y1 - y2);
+	}
 }
