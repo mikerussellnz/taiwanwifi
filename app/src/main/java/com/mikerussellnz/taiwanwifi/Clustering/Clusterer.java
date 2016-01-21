@@ -1,7 +1,9 @@
 package com.mikerussellnz.taiwanwifi.Clustering;
 
 import android.app.Activity;
+import android.util.DisplayMetrics;
 
+import org.mapsforge.core.model.Dimension;
 import org.mapsforge.core.model.LatLong;
 import org.mapsforge.core.model.Point;
 import org.mapsforge.core.util.MercatorProjection;
@@ -39,6 +41,7 @@ public abstract class Clusterer<T extends Marker> implements Observer {
 	private ArrayList<Cluster<T>> _clusters = new ArrayList<>();
 
 	private Map<Cluster<T>, Layer> _currentLayerLookup = new HashMap<>();
+	private BoundingBox _currentVisibleClusterQuery;
 
 	public Clusterer(Activity activity, MapView mapView) {
 		_activity = activity;
@@ -93,21 +96,21 @@ public abstract class Clusterer<T extends Marker> implements Observer {
 		onRecluster(_clusters);
 	}
 
-	protected Collection<Cluster<T>> getClustersForBounds(org.mapsforge.core.model.BoundingBox mapBoundingBox) {
-		if (mapBoundingBox != null) {
-			Point tl = locationToPixels(new LatLong(mapBoundingBox.maxLatitude, mapBoundingBox.minLongitude));
-			Point br = locationToPixels(new LatLong(mapBoundingBox.minLatitude, mapBoundingBox.maxLongitude));
+	protected BoundingBox getPixelBoundingBox(org.mapsforge.core.model.BoundingBox mapBoundingBox, double expansionDivisor) {
+		Point tl = locationToPixels(new LatLong(mapBoundingBox.maxLatitude, mapBoundingBox.minLongitude));
+		Point br = locationToPixels(new LatLong(mapBoundingBox.minLatitude, mapBoundingBox.maxLongitude));
 
-			BoundingBox boundingBox = new com.mikerussellnz.taiwanwifi.Clustering.BoundingBox(
-					tl,
-					br);
+		BoundingBox boundingBox = new BoundingBox(
+				tl,
+				br);
 
-			double expansion = Math.max(boundingBox.absoluteWidth(), boundingBox.absoluteHeight()) / 2;
-			boundingBox = boundingBox.expandBy(expansion);
-			return _clustersTree.query(boundingBox);
-		} else {
-			return _clustersTree.query(_worldBounds);
-		}
+		double expansion = Math.max(boundingBox.absoluteWidth(), boundingBox.absoluteHeight()) / expansionDivisor;
+		boundingBox = boundingBox.expandBy(expansion);
+		return boundingBox;
+	}
+
+	protected Collection<Cluster<T>> getClustersForBounds(BoundingBox boundingBox) {
+		return _clustersTree.query(boundingBox);
 	}
 
 	protected abstract Layer getDisplayLayerSingleItem(T item);
@@ -123,48 +126,51 @@ public abstract class Clusterer<T extends Marker> implements Observer {
 
 	@Override
 	public void onChange() {
-		if (Thread.currentThread() != _activity.getMainLooper().getThread()) {
-			return;
-		}
+		boolean onMainThread = Thread.currentThread() == _activity.getMainLooper().getThread();
 
-		int zoomLevel = _mapView.getModel().mapViewPosition.getZoomLevel();
-		if (zoomLevel != _oldZoomLevel) {
-			_oldZoomLevel = zoomLevel;
-			reclusterAndUpdateMap();
-		} else {
-			updateVisiableClusters();
+		// we are not interested in the zoomanimator changes, we only recluster when the zoom is complete.
+		// luckily, it fires a notifyObservers on the main thread ad the end of the zoom animation.
+		if (onMainThread) {
+			int zoomLevel = _mapView.getModel().mapViewPosition.getZoomLevel();
+			if (zoomLevel != _oldZoomLevel) {
+				_oldZoomLevel = zoomLevel;
+				reclusterAndUpdateMap();
+				return;
+			}
 		}
+		updateVisibleClusters();
 	}
 
-	private void updateVisiableClusters() {
-		Model model = _mapView.getModel();
-
-		if (model.mapViewDimension.getDimension() == null) {
-			int a = 1;
+	private synchronized void updateVisibleClusters() {
+		if (_currentVisibleClusterQuery == null) {
 			return;
 		}
+
+		Model model = _mapView.getModel();
 
 		org.mapsforge.core.model.BoundingBox mapBoundingBox = MapPositionUtil.getBoundingBox(
 				model.mapViewPosition.getMapPosition(),
-				model.mapViewDimension.getDimension(),
+				getMapViewDimensionOrFallback(model),
 				model.displayModel.getTileSize());
 
-		HashSet<Cluster<T>> nc = new HashSet(getClustersForBounds(mapBoundingBox));
+		BoundingBox requeryTest = getPixelBoundingBox(mapBoundingBox, 4);
+
+		// does a 25% overscan of the screen still fit in our 50% overscan query box, if so
+		// no need to requery clusters.
+		if (_currentVisibleClusterQuery.contains(requeryTest)) {
+			return;
+		}
+
+		BoundingBox clusterQueryBoundingBox = getPixelBoundingBox(mapBoundingBox, 2);
+
+		HashSet<Cluster<T>> nc = new HashSet(getClustersForBounds(clusterQueryBoundingBox));
 		HashSet<Cluster<T>> ec = new HashSet(_currentLayerLookup.keySet());
 
 		HashSet<Cluster<T>> tr = new HashSet(ec);
 		tr.removeAll(nc);
 
-		if (tr.size() > 0) {
-			System.out.println("Removing " + tr.size() + " items.");
-		}
-
 		HashSet<Cluster<T>> ta = new HashSet(nc);
 		ta.removeAll(ec);
-
-		if (ta.size() > 0) {
-			System.out.println("Adding " + ta.size() + " items.");
-		}
 
 		ArrayList<Layer> layersToRemove = new ArrayList<>(tr.size());
 		for (Cluster<T> cluster : tr) {
@@ -187,11 +193,24 @@ public abstract class Clusterer<T extends Marker> implements Observer {
 
 		removeLayersFromMap(layersToRemove);
 		addLayersToMap(layersToAdd);
-
-		System.out.println(_currentLayerLookup.size() + " items of " + _clusters.size() + " total on the map currently.");
+		_currentVisibleClusterQuery = clusterQueryBoundingBox;
 	}
 
-	private void reclusterAndUpdateMap() {
+	private Dimension getMapViewDimensionOrFallback(Model model) {
+		Dimension dimension = model.mapViewDimension.getDimension();
+
+		// fallback, if we don't have a dimension then the map hasn't been rendered.
+		// assume the map takes the whole screen as an approximation.
+		if (dimension == null) {
+			DisplayMetrics displaymetrics = new DisplayMetrics();
+			_activity.getWindowManager().getDefaultDisplay().getMetrics(displaymetrics);
+			dimension = new Dimension(displaymetrics.widthPixels, displaymetrics.heightPixels);
+		}
+
+		return dimension;
+	}
+
+	private synchronized void reclusterAndUpdateMap() {
 		recluster();
 
 		removeLayersFromMap(_currentLayerLookup.values());
@@ -199,19 +218,14 @@ public abstract class Clusterer<T extends Marker> implements Observer {
 
 		final Model model = _mapView.getModel();
 
-		org.mapsforge.core.model.BoundingBox mapBoundingBox = null;
-
-		// fix this... we only know visible area when map has a dimension and is rendered.
-		// for first display on startup we query the world as we can't be sure it will
-		// always have a dimension yet.
-		if (model.mapViewDimension.getDimension() != null) {
-			mapBoundingBox = MapPositionUtil.getBoundingBox(
+		org.mapsforge.core.model.BoundingBox mapBoundingBox = MapPositionUtil.getBoundingBox(
 					model.mapViewPosition.getMapPosition(),
-					model.mapViewDimension.getDimension(),
+					getMapViewDimensionOrFallback(model),
 					model.displayModel.getTileSize());
-		}
 
-		Collection<Cluster<T>> clusters = getClustersForBounds(mapBoundingBox);
+		BoundingBox clusterQueryBoundingBox = getPixelBoundingBox(mapBoundingBox, 2);
+
+		Collection<Cluster<T>> clusters = getClustersForBounds(clusterQueryBoundingBox);
 		Collection<Layer> layersToAdd = new ArrayList<>();
 
 		for (Cluster<T> cluster : clusters) {
@@ -226,5 +240,6 @@ public abstract class Clusterer<T extends Marker> implements Observer {
 		}
 
 		addLayersToMap(layersToAdd);
+		_currentVisibleClusterQuery = clusterQueryBoundingBox;
 	}
 }

@@ -31,6 +31,10 @@ public class BoundingBox {
 		return containsX && containsY;
 	}
 
+	public boolean contains(BoundingBox box2) {
+		return (x1 <= box2.x1 && x2 >= box2.x2 && y1 <= box2.y1 && y2 >= box2.y2);
+	}
+
 	public boolean intersects(BoundingBox box2) {
 		return (x1 <= box2.x2 && x2 >= box2.x1 && y1 <= box2.y2 && y2 >= box2.y1);
 	}
@@ -46,4 +50,5 @@ public class BoundingBox {
 	public BoundingBox expandBy(double expansion) {
 		return new BoundingBox(x1 - expansion, y1 - expansion, x2 + expansion, y2 + expansion);
 	}
+
 }
