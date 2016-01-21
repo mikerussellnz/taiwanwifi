@@ -7,7 +7,6 @@ This app uses an bundled map file to render maps offline.
 Place "taiwan.map" (downloaded from mapsforge) into the assets directory before buidling in Android Studio.
 
 ### Todo
-- Pan map when popup is displayed so that whole popup can be seen. 
 - Provide information screen about registering for iTaiwan WiFi. 
 - Chinese language support. 
 - Ability to update list of HotSpots from online. 
