@@ -74,8 +74,6 @@ public class MainActivity extends AppCompatActivity implements
 	private View _popupView;
 	private Marker _selectedMarker;
 
-	private double _oldZoomLevel = -1.0;
-
 	private BoundingBox _mapBounds;
 	private TextView _debugText;
 	private boolean _trackingLocation = false;
@@ -106,8 +104,7 @@ public class MainActivity extends AppCompatActivity implements
 
 		_mapView = (MapView) findViewById(R.id.mapView);
 		_actionButton = (FloatingActionButton) findViewById(R.id.fab);
-
-		_clusterer = new ImprovedClusterer<>(_mapView);
+		_debugText = (TextView) findViewById(R.id.debugText);
 
 		/* FloatingActionButton settingsFab = (FloatingActionButton) findViewById(R.id.settingsFab);
 		settingsFab.setImageDrawable(new IconicsDrawable(this, GoogleMaterial.Icon.gmd_settings).color(Color.DKGRAY));
@@ -120,7 +117,44 @@ public class MainActivity extends AppCompatActivity implements
 			}
 		}); */
 
-		_debugText = (TextView) findViewById(R.id.debugText);
+		_clusterer = new ImprovedClusterer<HotSpot>(this, _mapView) {
+			@Override
+			public Layer getDisplayLayerSingleItem(HotSpot item) {
+				return item;
+			}
+
+			@Override
+			public Layer getDisplayLayerCluster(Cluster cluster) {
+				return getMapMarker(cluster);
+			}
+
+			@Override
+			public void addLayersToMap(Collection<Layer> layers) {
+				_hotSpotsLayer.addAll(layers);
+			}
+
+			@Override
+			public void removeLayersFromMap(Collection<Layer> layers) {
+				_hotSpotsLayer.removeAll(layers);
+			}
+
+			@Override
+			protected void onRecluster(ArrayList<Cluster<HotSpot>> newClusters) {
+				super.onRecluster(newClusters);
+				boolean stillCanSeeSelectedMarker = false;
+
+				for (Cluster<HotSpot> cluster : newClusters) {
+					if (cluster.getItems().size() == 1 && cluster.getItems().get(0) == _selectedMarker) {
+						stillCanSeeSelectedMarker = true;
+					}
+				}
+
+				if (!stillCanSeeSelectedMarker) {
+					deselectSelectedMarker();
+				}
+			}
+		};
+
 
 		updateTrackingStatus(false);
 		_actionButton.setOnClickListener(new View.OnClickListener() {
@@ -208,12 +242,10 @@ public class MainActivity extends AppCompatActivity implements
 				@Override
 				public void onDataImportComplete() {
 					loadAllHotSpots(list);
-					addHotSpotsToMap();
 				}
 			});
 		} else {
 			loadAllHotSpots(list);
-			addHotSpotsToMap();
 		}
 	}
 
@@ -231,37 +263,16 @@ public class MainActivity extends AppCompatActivity implements
 		System.out.println("done adding to clusterer.");
 	}
 
-	private void addHotSpotsToMap() {
-		if (_allHotSpots == null) {
-			return;
+	private Marker getMapMarker(Cluster<HotSpot> cluster) {
+		if (cluster.getItems().size() == 1) {
+			HotSpot hotSpot = cluster.getItems().get(0);
+			return hotSpot;
+		} else {
+			ClusterMarker marker = new ClusterMarker(cluster,
+					ClusterMarker.getIcon(this, cluster.getItems().size()));
+			marker.setMarkerTappedListener(this);
+			return marker;
 		}
-
-		Collection<Cluster<HotSpot>> clusters = _clusterer.cluster();
-
-		boolean stillCanSeeSelectedMarker = false;
-
-		ArrayList<Layer> mapDisplayItems = new ArrayList<>(clusters.size());
-
-		for (Cluster<HotSpot> cluster : clusters) {
-			if (cluster.getItems().size() == 1) {
-				HotSpot hotSpot = cluster.getItems().get(0);
-				if (_selectedMarker == hotSpot) {
-					stillCanSeeSelectedMarker = true;
-				}
-				mapDisplayItems.add(hotSpot);
-			} else {
-				ClusterMarker marker = new ClusterMarker(cluster,
-						ClusterMarker.getIcon(this, cluster.getItems().size()));
-				marker.setMarkerTappedListener(this);
-				mapDisplayItems.add(marker);
-			}
-		}
-
-		if (!stillCanSeeSelectedMarker) {
-			deselectSelectedMarker();
-		}
-
-		_hotSpotsLayer.addAll(mapDisplayItems);
 	}
 
 	private void deselectSelectedMarker() {
@@ -447,17 +458,6 @@ public class MainActivity extends AppCompatActivity implements
 
 	@Override
 	public void onChange() {
-		// for re-clustering on zoom change - we only care about the zoom level increment
-		// posted by the main thread at the end of the zoom animation.
-		if (Thread.currentThread() == getMainLooper().getThread()) {
-			int zoomLevel = _mapView.getModel().mapViewPosition.getZoomLevel();
-			if (zoomLevel != _oldZoomLevel) {
-				_hotSpotsLayer.clear();
-				addHotSpotsToMap();
-			}
-			_oldZoomLevel = _mapView.getModel().mapViewPosition.getZoomLevel();
-		}
-
 		if (_popupView != null && mapCurrentlyBeingScaled()) {
 			_popupView.post(new Runnable() {
 				@Override

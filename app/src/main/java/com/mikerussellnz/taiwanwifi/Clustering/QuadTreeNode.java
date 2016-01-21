@@ -115,4 +115,10 @@ public class QuadTreeNode<T extends QuadTreeItem> {
 		_southEast.query(boundingBox, results);
 		_southWest.query(boundingBox, results);
 	}
+
+	public void insertItems(ArrayList<T> items) {
+		for (T item: items) {
+			insertItem(item);
+		}
+	}
 }

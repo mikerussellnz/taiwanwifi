@@ -1,5 +1,7 @@
 package com.mikerussellnz.taiwanwifi.Clustering;
 
+import android.app.Activity;
+
 import org.mapsforge.core.model.Point;
 import org.mapsforge.map.android.view.MapView;
 import org.mapsforge.map.layer.overlay.Marker;
@@ -12,12 +14,12 @@ import java.util.Collection;
 /**
  * Created by mike on 6/01/16.
  */
-public class NaiveClusterer<T extends Marker> extends Clusterer<T> {
+public abstract class NaiveClusterer<T extends Marker> extends Clusterer<T> {
 	protected final float GRIDSIZE = 75 * DisplayModel.getDeviceScaleFactor();
 	protected int _maxClusteringZoom = 16;
 
-	public NaiveClusterer(MapView mapView) {
-		super(mapView);
+	public NaiveClusterer(Activity activity, MapView mapView) {
+		super(activity, mapView);
 	}
 
 	@Override

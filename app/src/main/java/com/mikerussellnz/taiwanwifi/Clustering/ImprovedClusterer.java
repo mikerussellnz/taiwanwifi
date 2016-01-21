@@ -3,6 +3,8 @@ package com.mikerussellnz.taiwanwifi.Clustering;
 /**
  * Created by mike on 20/01/16.
  */
+import android.app.Activity;
+
 import org.mapsforge.core.model.Point;
 import org.mapsforge.map.android.view.MapView;
 import org.mapsforge.map.layer.overlay.Marker;
@@ -17,11 +19,11 @@ import java.util.Set;
 /**
  * Created by mike on 6/01/16.
  */
-public class ImprovedClusterer<T extends Marker> extends Clusterer<T> {
+public abstract class ImprovedClusterer<T extends Marker> extends Clusterer<T> {
 	protected final float GRIDSIZE = 75 * DisplayModel.getDeviceScaleFactor();
 
-	public ImprovedClusterer(MapView mapView) {
-		super(mapView);
+	public ImprovedClusterer(Activity activity, MapView mapView) {
+		super(activity, mapView);
 	}
 
 	@Override

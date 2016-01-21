@@ -41,6 +41,10 @@ public class LayerGroup extends Layer implements Iterable<Layer>, RandomAccess {
 		_layerList = new CopyOnWriteArrayList<>();
 	}
 
+	public List<Layer> getLayerList() {
+		return _layerList;
+	}
+
 	public synchronized void add(int index, Layer layer) {
 		checkIsNull(layer);
 		layer.setDisplayModel(displayModel);
@@ -70,6 +74,16 @@ public class LayerGroup extends Layer implements Iterable<Layer>, RandomAccess {
 		_layerList.addAll(index, layers);
 		for (Layer layer : layers) {
 			layer.setDisplayModel(displayModel);
+		}
+		requestRedraw();
+	}
+
+
+	public void removeAll(Collection<Layer> layers) {
+		checkIsNull(layers);
+		_layerList.removeAll(layers);
+		for (Layer layer : layers) {
+			layer.setDisplayModel(null);
 		}
 		requestRedraw();
 	}

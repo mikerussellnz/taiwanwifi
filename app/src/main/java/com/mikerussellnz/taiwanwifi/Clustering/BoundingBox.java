@@ -18,6 +18,13 @@ public class BoundingBox {
 		this.y2 = y2;
 	}
 
+	public BoundingBox(Point p1, Point p2) {
+		this.x1 = p1.x;
+		this.y1 = p1.y;
+		this.x2 = p2.x;
+		this.y2 = p2.y;
+	}
+
 	public boolean contains(Point p) {
 		boolean containsX = x1 <= p.x && p.x <= x2;
 		boolean containsY = y1 <= p.y && p.y <= y2;
@@ -34,5 +41,9 @@ public class BoundingBox {
 
 	public double absoluteHeight() {
 		return Math.abs(y1 - y2);
+	}
+
+	public BoundingBox expandBy(double expansion) {
+		return new BoundingBox(x1 - expansion, y1 - expansion, x2 + expansion, y2 + expansion);
 	}
 }
