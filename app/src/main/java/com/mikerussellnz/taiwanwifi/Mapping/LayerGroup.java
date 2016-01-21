@@ -82,9 +82,6 @@ public class LayerGroup extends Layer implements Iterable<Layer>, RandomAccess {
 	public void removeAll(Collection<Layer> layers) {
 		checkIsNull(layers);
 		_layerList.removeAll(layers);
-		for (Layer layer : layers) {
-			layer.setDisplayModel(null);
-		}
 		requestRedraw();
 	}
 
