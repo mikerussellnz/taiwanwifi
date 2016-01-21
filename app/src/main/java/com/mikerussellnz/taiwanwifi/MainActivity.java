@@ -439,8 +439,47 @@ public class MainActivity extends AppCompatActivity implements
 		address.setText(hs.getAddress());
 		addOrMovePopup(marker);
 
+		// now pan the map so the entire popup is on screen.
+		_popupView.postDelayed(_popViewPanMap, 10);
 		return false;
 	}
+
+	private Runnable _popViewPanMap = new Runnable() {
+		@Override
+		public void run() {
+			if (_popupView.getWidth() > 0 && _popupView.getHeight() > 0) {
+				float x = _popupView.getX();
+				float y = _popupView.getY();
+				int w = _popupView.getWidth();
+				int h = _popupView.getHeight();
+
+				int mapWidth = _mapView.getWidth();
+				int mapHeight = _mapView.getHeight();
+
+				int bufferSize = Utils.getDip(getBaseContext(), 10);
+
+				int moveX = 0;
+				int moveY = 0;
+
+				if (x < 0) {
+					moveX = Math.round(x * -1) + bufferSize;
+				} else if ((x + w) > mapWidth) {
+					moveX = (Math.round(((x + w) - mapWidth)) + bufferSize) * -1;
+				}
+
+				if (y < 0) {
+					moveY = Math.round(y * -1) + bufferSize;
+				} else if ((y + h) > mapHeight) {
+					moveY = (Math.round(((y + h) - mapHeight)) + bufferSize) * -1;
+				}
+
+				_mapView.getModel().mapViewPosition.moveCenter(moveX, moveY, true);
+			} else {
+				System.out.println("Popup view does not have w/h, re-posting until it does renders.");
+				_popupView.postDelayed(_popViewPanMap, 10);
+			}
+		}
+	};
 
 	private boolean mapCurrentlyBeingScaled() {
 		Model model = _mapView.getModel();
